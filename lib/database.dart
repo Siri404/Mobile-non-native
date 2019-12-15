@@ -9,6 +9,9 @@ class DatabaseProvider {
   Future<Database> getDatabase() async {
     return openDatabase(
         join(await getDatabasesPath(), "shoppingList.db"),
+        onOpen: (db) async {
+          db.execute("PRAGMA foreign_keys = ON;");
+        },
         onCreate: (db, version) async {
           await db.execute(
               "CREATE TABLE lists(id INTEGER PRIMARY KEY, name Text)"
@@ -34,6 +37,20 @@ class DatabaseProvider {
       return Item(
           id: maps[i]["id"],
           price: maps[i]["price"],
+          list_id: maps[i]["list_id"],
+          name: maps[i]["name"]
+      );
+    });
+  }
+
+  Future<List<Item>> getAllItems() async{
+    final Database db = await getDatabase();
+    final List<Map<String, dynamic>> maps = await db.query("items");
+    return List.generate(maps.length, (i) {
+      return Item(
+          id: maps[i]["id"],
+          price: maps[i]["price"],
+          list_id: maps[i]["list_id"],
           name: maps[i]["name"]
       );
     });

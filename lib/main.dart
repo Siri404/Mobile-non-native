@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_app/ItemsWidget.dart';
 import 'package:flutter_app/database.dart';
+import 'package:flutter_app/serverCom.dart';
 import 'package:flutter_app/shoppingList.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:connectivity/connectivity.dart';
+import 'package:flutter_app/ItemsWidget.dart';
+
+import 'item.dart';
+
 
 void main() => runApp(ToDoApp());
 
@@ -36,16 +41,40 @@ class ShoppingListsWidget extends StatefulWidget {
 
 class ShoppingListsWidgetState extends State<ShoppingListsWidget> {
   DatabaseProvider dbProvider = new DatabaseProvider();
+  ServerCom serverCom = new ServerCom();
+  var subscription;
+
+  @override
+  initState() {
+    super.initState();
+
+    subscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      sendData();
+    });
+  }
+
+  void sendData() async {
+    List<ShoppingList> shoppingLists = await getLists();
+    List<Item> items = await getItems();
+    serverCom.sendItemsData(items);
+    serverCom.sendListsData(shoppingLists);
+
+  }
 
   Future<List<ShoppingList>> getLists() async {
     return await dbProvider.getLists();
   }
 
+  Future<List<Item>> getItems() async {
+    return await dbProvider.getAllItems();
+  }
+
   void addList(ShoppingList list) async {
-    if (list.name.length > 0) {
-      await dbProvider.insertList(list);
-      setState(() {});
+    await dbProvider.insertList(list);
+    if(await checkConnection()) {
+      await serverCom.addList(list);
     }
+    setState(() {});
   }
 
   void tryAddList(TextEditingController nameController){
@@ -67,15 +96,22 @@ class ShoppingListsWidgetState extends State<ShoppingListsWidget> {
   }
 
   void removeList(int id) async {
-    await dbProvider.deleteList(id);
-    setState(() {});
-  }
-
-  void updateList(ShoppingList list) async {
-    if (list.name.length > 0) {
-      await dbProvider.updateList(list);
-      setState(() {});
+    if(await checkConnection()) {
+      await dbProvider.deleteList(id);
+      await serverCom.deleteList(id);
     }
+    else{
+      Fluttertoast.showToast(
+          msg: "No internet connection!",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+      );
+    }
+    setState(() {});
   }
 
   void tryUpdateList(ShoppingList list, TextEditingController nameController){
@@ -94,6 +130,33 @@ class ShoppingListsWidgetState extends State<ShoppingListsWidget> {
       updateList(new ShoppingList(id: list.id, name: nameController.text));
       Navigator.pop(context);
     }
+  }
+//
+  void updateList(ShoppingList list) async {
+    if(await checkConnection()) {
+      await serverCom.updateList(list);
+      await dbProvider.updateList(list);
+    }
+    else{
+      Fluttertoast.showToast(
+          msg: "No internet connection!",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+      );
+    }
+    setState(() {});
+  }
+
+  Future<bool> checkConnection() async {
+    var conres = await Connectivity().checkConnectivity();
+    if(conres == ConnectivityResult.wifi){
+      return true;
+    }
+    return false;
   }
 
   void promptChooseAction(ShoppingList list){
@@ -181,21 +244,21 @@ class ShoppingListsWidgetState extends State<ShoppingListsWidget> {
                       title: new Text("Add new list")
                   ),
                   body: new Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      new TextField(
-                        autofocus: true,
-                        controller: nameController,
-                        decoration: new InputDecoration(
-                            hintText: "Name",
-                            contentPadding: const EdgeInsets.all(16.0)
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        new TextField(
+                          autofocus: true,
+                          controller: nameController,
+                          decoration: new InputDecoration(
+                              hintText: "Name",
+                              contentPadding: const EdgeInsets.all(16.0)
+                          ),
                         ),
-                      ),
-                      new FlatButton(
-                          child: new Text("Done"),
-                          onPressed: () => tryAddList(nameController)
-                      )
-                    ]
+                        new FlatButton(
+                            child: new Text("Done"),
+                            onPressed: () => tryAddList(nameController)
+                        )
+                      ]
                   )
 
               );
@@ -249,4 +312,5 @@ class ShoppingListsWidgetState extends State<ShoppingListsWidget> {
         )
     );
   }
+
 }

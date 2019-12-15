@@ -1,8 +1,11 @@
+import 'package:connectivity/connectivity.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_app/database.dart';
 import 'package:flutter_app/item.dart';
 import 'package:flutter_app/shoppingList.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+
+import 'serverCom.dart';
 
 class ItemsWidget extends StatefulWidget {
   final ShoppingList list;
@@ -19,15 +22,28 @@ class ItemsWidgetState extends State<ItemsWidget> {
 
   ItemsWidgetState(this.list);
 
+  ServerCom serverCom = new ServerCom();
+  var subscription;
+
+  @override
+  initState() {
+    super.initState();
+
+    subscription = Connectivity().onConnectivityChanged.listen((ConnectivityResult result) {
+      //sendData();
+    });
+  }
+
   Future<List<Item>> getItems() async {
     return await dbProvider.getItems(this.list);
   }
 
   void addItem(Item item) async {
-    if (item.name.length > 0) {
-      await dbProvider.insertItem(item);
-      setState(() {});
+    await dbProvider.insertItem(item);
+    if(await checkConnection()) {
+      await serverCom.addItem(item);
     }
+    setState(() {});
   }
 
   void tryAddItem(TextEditingController nameController, TextEditingController priceController){
@@ -49,15 +65,41 @@ class ItemsWidgetState extends State<ItemsWidget> {
   }
 
   void removeItem(int id) async {
-    await dbProvider.deleteItem(id);
+    if(await checkConnection()) {
+      await dbProvider.deleteItem(id);
+      await serverCom.deleteItem(id);
+    }
+    else{
+      Fluttertoast.showToast(
+          msg: "No internet connection!",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+      );
+    }
     setState(() {});
   }
 
   void updateItem(Item item) async {
-    if (item.name.length > 0) {
+    if(await checkConnection()) {
       await dbProvider.updateItem(item);
-      setState(() {});
+      await serverCom.updateItem(item);
     }
+    else{
+      Fluttertoast.showToast(
+          msg: "No internet connection!",
+          toastLength: Toast.LENGTH_SHORT,
+          gravity: ToastGravity.CENTER,
+          timeInSecForIos: 1,
+          backgroundColor: Colors.red,
+          textColor: Colors.white,
+          fontSize: 16.0
+      );
+    }
+    setState(() {});
   }
 
   void tryUpdateItem(Item item, TextEditingController nameController, TextEditingController priceController){
@@ -78,17 +120,30 @@ class ItemsWidgetState extends State<ItemsWidget> {
     }
   }
 
+  void sendData() async {
+    List<Item> items = await getItems();
+    serverCom.sendItemsData(items);
+  }
+
+  Future<bool> checkConnection() async {
+    var conres = await Connectivity().checkConnectivity();
+    if(conres == ConnectivityResult.wifi){
+      return true;
+    }
+    return false;
+  }
+
   void showItemDetails(Item item) {
     showDialog(
         context: context,
         builder: (BuildContext context) {
           return new SimpleDialog(
-              contentPadding: const EdgeInsets.all(16.0),
-              children: <Widget>[
-                new Text("id: " + item.id.toString()),
-                new Text("Name: " + item.name),
-                new Text("Price: " + item.price.toString())
-              ],
+            contentPadding: const EdgeInsets.all(16.0),
+            children: <Widget>[
+              new Text("id: " + item.id.toString()),
+              new Text("Name: " + item.name),
+              new Text("Price: " + item.price.toString())
+            ],
 
           );
         }
